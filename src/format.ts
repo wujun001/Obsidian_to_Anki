@@ -134,25 +134,27 @@ export class FormatConverter {
 		return [note_text.replace(regexp, mask), matches]
 	}
 
-	decensor(note_text: string, mask:string, replacements: string[], escape: boolean): string {
-		for (let replacement of replacements) {
-			note_text = note_text.replace(
-				mask, escape ? escapeHtml(replacement) : replacement
-			)
-		}
-		return note_text
+	decensor(note_text: string, mask: string, replacements: string[], escape: boolean): string {
+		let i = 0;
+		return note_text.replace(new RegExp(mask, 'g'), (): string => {
+			let replacement: string = replacements[i++];
+			return escape ? escapeHtml(replacement) : replacement;
+		});
 	}
 
 	format(note_text: string, cloze: boolean, highlights_to_cloze: boolean): string {
-		note_text = this.obsidian_to_anki_math(note_text)
-		//Extract the parts that are anki math
-		let math_matches: string[]
 		let inline_code_matches: string[]
 		let display_code_matches: string[]
 		const add_highlight_css: boolean = note_text.match(c.OBS_DISPLAY_CODE_REGEXP) ? true : false;
-		[note_text, math_matches] = this.censor(note_text, ANKI_MATH_REGEXP, MATH_REPLACE);
 		[note_text, display_code_matches] = this.censor(note_text, c.OBS_DISPLAY_CODE_REGEXP, DISPLAY_CODE_REPLACE);
 		[note_text, inline_code_matches] = this.censor(note_text, c.OBS_CODE_REGEXP, INLINE_CODE_REPLACE);
+
+
+		note_text = this.obsidian_to_anki_math(note_text)
+		//Extract the parts that are anki math
+		let math_matches: string[]
+		[note_text, math_matches] = this.censor(note_text, ANKI_MATH_REGEXP, MATH_REPLACE);
+
 		if (cloze) {
 			if (highlights_to_cloze) {
 				note_text = note_text.replace(HIGHLIGHT_REGEXP, "{$1}")
