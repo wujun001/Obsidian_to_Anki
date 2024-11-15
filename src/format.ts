@@ -41,6 +41,36 @@ function escapeHtml(unsafe: string): string {
          .replace(/'/g, "&#039;");
  }
 
+ 
+// 定义 CodeBlock 类型
+export interface CodeBlock {
+	id: number;
+	content: string;
+  }
+
+export function replaceCodeBlocks(text: string, codeBlocks: CodeBlock[]): string {
+let uniqueId = 0;
+return text
+	.replace(c.OBS_DISPLAY_CODE_REGEXP, (match) => {
+	const placeholderId = uniqueId++;
+	codeBlocks.push({ id: placeholderId, content: match });
+	return `${c.CODE_BLOCK_PLACEHOLDER_PREFIX}${placeholderId}`;
+	})
+	.replace(c.OBS_CODE_REGEXP, (match) => {
+	const placeholderId = uniqueId++;
+	codeBlocks.push({ id: placeholderId, content: match });
+	return `${c.CODE_BLOCK_PLACEHOLDER_PREFIX}${placeholderId}`;
+	});
+}
+
+export function restoreCodeBlocks(text: string, codeBlocks: CodeBlock[]): string {
+return text.replace(new RegExp(`${c.CODE_BLOCK_PLACEHOLDER_PREFIX}(\\d+)`, "g"), (_, id) => {
+	const block = codeBlocks.find((block) => block.id === parseInt(id, 10));
+	return block ? block.content : "";
+});
+}
+  
+
 export class FormatConverter {
 
 	file_cache: CachedMetadata

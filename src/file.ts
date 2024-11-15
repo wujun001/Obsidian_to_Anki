@@ -7,7 +7,7 @@ import { Note, InlineNote, RegexNote, CLOZE_ERROR, NOTE_TYPE_ERROR, TAG_SEP, ID_
 import { Md5 } from 'ts-md5/dist/md5';
 import * as AnkiConnect from './anki'
 import * as c from './constants'
-import { FormatConverter } from './format'
+import { FormatConverter,replaceCodeBlocks, restoreCodeBlocks,CodeBlock } from './format'
 import { CachedMetadata, HeadingCache } from 'obsidian'
 
 const double_regexp: RegExp = /(?:\r\n|\r|\n)((?:\r\n|\r|\n)(?:<!--)?ID: \d+)/g
@@ -299,8 +299,16 @@ export class AllFile extends AbstractFile {
     }
 
     scanNotes() {
-        for (let note_match of this.file.matchAll(this.data.NOTE_REGEXP)) {
-            let [note, position]: [string, number] = [note_match[1], note_match.index + note_match[0].indexOf(note_match[1]) + note_match[1].length]
+        // 用于存储代码块
+        const codeBlocks: CodeBlock[] = [];
+
+        const replacedFile = replaceCodeBlocks(this.file, codeBlocks);
+        
+        for (let note_match of replacedFile.matchAll(this.data.NOTE_REGEXP)) {
+            
+            const restoredNote = restoreCodeBlocks(note_match[1], codeBlocks);
+            let [note, position]: [string, number] = [restoredNote, this.file.indexOf(restoredNote) + restoredNote.length]
+ 
             // That second thing essentially gets the index of the end of the first capture group.
             let parsed = new Note(
                 note,
@@ -313,7 +321,7 @@ export class AllFile extends AbstractFile {
                 this.url,
                 this.frozen_fields_dict,
                 this.data,
-                this.data.add_context ? this.getContextAtIndex(note_match.index) : ""
+                this.data.add_context ? this.getContextAtIndex(this.file.indexOf(restoredNote)-note_match[0].indexOf(note_match[1])) : ""
             )
             if (parsed.identifier == null) {
                 // Need to make sure global_tags get added

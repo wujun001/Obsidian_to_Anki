@@ -3,7 +3,7 @@
 Input must be the note text.
 Does NOT deal with finding the note in the file.*/
 
-import { FormatConverter } from './format'
+import { FormatConverter,replaceCodeBlocks, restoreCodeBlocks, CodeBlock } from './format'
 import { AnkiConnectNote, AnkiConnectNoteAndID } from './interfaces/note-interface'
 import { FIELDS_DICT, FROZEN_FIELDS_DICT } from './interfaces/field-interface'
 import { FileData } from './interfaces/settings-interface'
@@ -48,6 +48,7 @@ abstract class AbstractNote {
     curly_cloze: boolean
 	highlights_to_cloze: boolean
 	no_note_type: boolean
+    code_Block: CodeBlock[] = [];
 
     constructor(note_text: string, fields_dict: FIELDS_DICT, curly_cloze: boolean, highlights_to_cloze: boolean, formatter: FormatConverter) {
         this.text = note_text.trim()
@@ -115,7 +116,7 @@ abstract class AbstractNote {
 export class Note extends AbstractNote {
 
     getSplitText(): string[] {
-        return this.text.split("\n")
+        return replaceCodeBlocks(this.text,this.code_Block).split("\n")
     }
 
     getIdentifier(): number | null {
@@ -160,6 +161,7 @@ export class Note extends AbstractNote {
             fields[this.current_field] += line + "\n"
         }
         for (let key in fields) {
+            fields[key] = restoreCodeBlocks(fields[key], this.code_Block);
             fields[key] = this.formatter.format(
                 fields[key].trim(),
                 this.note_type.includes("Cloze") && this.curly_cloze,

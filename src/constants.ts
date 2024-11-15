@@ -11,3 +11,6 @@ export function escapeRegex(str: string): string {
     // Got from stackoverflow - https://stackoverflow.com/questions/3561493/is-there-a-regexp-escape-function-in-javascript
     return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 }
+
+
+export const CODE_BLOCK_PLACEHOLDER_PREFIX = "__CODE_BLOCK__";
