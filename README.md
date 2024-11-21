@@ -1,4 +1,4 @@
-基于https://github.com/ObsidianToAnki/Obsidian_to_Anki修改
+基于 https://github.com/ObsidianToAnki/Obsidian_to_Anki 修改
 
 # Changelog
 
