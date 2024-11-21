@@ -23,13 +23,33 @@ const PARA_CLOSE:string = "</p>"
 
 let cloze_unset_num: number = 1
 
+const convertDollarSignExtension = [
+	{
+	  type: 'lang', // 在 Markdown 转换阶段处理
+	  filter: function (text: string) {
+		// 使用预定义的正则变量分离代码块和非代码块内容
+		const result = text.replace(
+		  new RegExp(`${c.OBS_DISPLAY_CODE_REGEXP.source}|${c.OBS_CODE_REGEXP.source}|\\\\¨D`, 'g'),
+		  (match, codeBlock) => {
+			if (codeBlock) {
+			  return match; // 跳过代码块
+			}
+			return match.replace(/\\¨D/g, '$'); // 替换非代码块中的 \$ 为 $
+		  }
+		);
+		return result;
+	  }
+	}
+  ];
+  
+
 let converter: Converter = new Converter({
 	simplifiedAutoLink: true,
 	literalMidWordUnderscores: true,
 	tables: true, tasklists: true,
 	simpleLineBreaks: true,
 	requireSpaceBeforeHeadingText: true,
-	extensions: [showdownHighlight]
+	extensions: [showdownHighlight, convertDollarSignExtension]
 })
 
 function escapeHtml(unsafe: string): string {
