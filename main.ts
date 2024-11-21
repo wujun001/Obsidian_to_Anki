@@ -13,6 +13,7 @@ export default class MyPlugin extends Plugin {
 	fields_dict: Record<string, string[]>
 	added_media: string[]
 	file_hashes: Record<string, string>
+	private statusBarItem: HTMLElement;
 
 	async getDefaultSettings(): Promise<PluginSettings> {
 		let settings: PluginSettings = {
@@ -182,45 +183,143 @@ export default class MyPlugin extends Plugin {
 		});
 		return allTFiles;
 	}
+	// 更新状态栏的辅助方法
+	private updateStatusBar(currentStep: number, totalSteps: number, message: string) {
+		if (currentStep === 0) {
+			// 清空状态栏
+			this.statusBarItem.setText("");
+			return;
+		}
+
+		// 根据当前步骤生成进度条
+		const completed = "🟢".repeat(currentStep); // 已完成的部分
+		const remaining = "⚪".repeat(totalSteps - currentStep); // 未完成的部分
+		const progressBar = completed + remaining;
+
+		// 更新状态栏内容
+		const statusMessage = `${currentStep}/${totalSteps} ${progressBar} ${message}`;
+		this.statusBarItem.setText(statusMessage);
+
+		// 同时输出到控制台
+		console.info(`Status Updated: ${statusMessage}`);
+	}
 
 	async scanVault() {
+		// 初始化步骤耗时记录
+		const stepTimes: Array<{ step: string, time: number }> = [];
+		let stepStartTime: number; // 记录每一步开始的时间
+	
+		const recordStepTime = (step: string) => {
+			const stepEndTime = Date.now();
+			const stepElapsedTime = ((stepEndTime - stepStartTime) / 1000).toFixed(2); // 转换为秒
+			stepTimes.push({ step, time: parseFloat(stepElapsedTime) });
+			stepStartTime = stepEndTime; // 更新下一步的开始时间
+		};
+	
+		// 开始任务
+		const totalStartTime = Date.now(); // 总任务开始时间
+		stepStartTime = totalStartTime;
+	
+		// 初始化状态栏并设置任务开始状态
 		new Notice('Scanning vault, check console for details...');
-		console.info("Checking connection to Anki...")
+		this.statusBarItem = this.addStatusBarItem();
+		this.updateStatusBar(1, 8, "Checking connection to Anki...");
+	
 		try {
-			await AnkiConnect.invoke('modelNames')
+			await AnkiConnect.invoke('modelNames');
+		} catch (e) {
+			new Notice("Error, couldn't connect to Anki! Check console for error message.");
+			this.updateStatusBar(0, 8, ""); // 清空状态栏
+			return;
 		}
-		catch(e) {
-			new Notice("Error, couldn't connect to Anki! Check console for error message.")
-			return
-		}
-		new Notice("Successfully connected to Anki! This could take a few minutes - please don't close Anki until the plugin is finished")
-		const data: ParsedSettings = await settingToData(this.app, this.settings, this.fields_dict)
-		const scanDir = this.app.vault.getAbstractFileByPath(this.settings.Defaults["Scan Directory"])
+		recordStepTime("Connecting to Anki");
+	
+		// 连接成功，状态更新
+		new Notice("Successfully connected to Anki! This could take a few minutes - please don't close Anki until the plugin is finished");
+		this.updateStatusBar(2, 8, "Connected to Anki, preparing scan...");
+	
+		const data: ParsedSettings = await settingToData(this.app, this.settings, this.fields_dict);
+		const scanDir = this.app.vault.getAbstractFileByPath(this.settings.Defaults["Scan Directory"]);
+		const scanDirPath = scanDir instanceof TFolder ? scanDir.path : "Default Directory";
+		console.info(`Scan directory: ${scanDirPath}`);
+		this.updateStatusBar(3, 8, "Loading scan directory...");
+		recordStepTime("Preparing scan directory");
+	
 		let manager = null;
+		let markdownFiles = [];
 		if (scanDir !== null) {
-			let markdownFiles = [];
 			if (scanDir instanceof TFolder) {
-				console.info("Using custom scan directory: " + scanDir.path)
+				console.info("Using custom scan directory: " + scanDir.path);
 				markdownFiles = this.getAllTFilesInFolder(scanDir);
 			} else {
-				new Notice("Error: incorrect path for scan directory " + this.settings.Defaults["Scan Directory"])
-				return
+				new Notice("Error: incorrect path for scan directory " + this.settings.Defaults["Scan Directory"]);
+				this.updateStatusBar(0, 8, ""); // 清空状态栏
+				return;
 			}
-			manager = new FileManager(this.app, data, markdownFiles, this.file_hashes, this.added_media)
+			this.updateStatusBar(4, 8, "Files loaded, initializing FileManager...");
+			manager = new FileManager(this.app, data, markdownFiles, this.file_hashes, this.added_media);
 		} else {
-			manager = new FileManager(this.app, data, this.app.vault.getMarkdownFiles(), this.file_hashes, this.added_media);
+			markdownFiles = this.app.vault.getMarkdownFiles();
+			this.updateStatusBar(4, 8, "Using default scan directory...");
+			manager = new FileManager(this.app, data, markdownFiles, this.file_hashes, this.added_media);
 		}
-		
-		await manager.initialiseFiles()
-		await manager.requests_1()
-		this.added_media = Array.from(manager.added_media_set)
-		const hashes = manager.getHashes()
+	
+		// 输出处理的文件数量
+		console.info(`Number of Markdown files found: ${markdownFiles.length}`);
+		recordStepTime(`Loading files (${markdownFiles.length} files) and initializing FileManager`);
+	
+		// 文件管理器初始化完成
+		this.updateStatusBar(5, 8, "Initializing files...");
+		await manager.initialiseFiles();
+		recordStepTime("Initializing files");
+	
+		// 处理请求
+		this.updateStatusBar(6, 8, "Processing requests...");
+		await manager.requests_1();
+		recordStepTime("Processing requests");
+	
+		// 更新媒体数据
+		this.added_media = Array.from(manager.added_media_set);
+	
+		// 保存文件哈希
+		const hashes = manager.getHashes();
 		for (let key in hashes) {
-			this.file_hashes[key] = hashes[key]
+			this.file_hashes[key] = hashes[key];
 		}
-		new Notice("All done! Saving file hashes and added media now...")
-		this.saveAllData()
+		recordStepTime("Saving file hashes and media data");
+	
+		// 保存所有数据
+		this.updateStatusBar(7, 8, "Saving all data...");
+		const saveStartTime = Date.now();
+		await this.saveAllData();
+		const saveElapsedTime = ((Date.now() - saveStartTime) / 1000).toFixed(2);
+		stepTimes.push({ step: "Saving all data", time: parseFloat(saveElapsedTime) });
+	
+		// 更新任务结束状态
+		this.updateStatusBar(8, 8, "Scan complete. Saving data...");
+		const totalEndTime = Date.now();
+		const totalElapsedTime = ((totalEndTime - totalStartTime) / 1000).toFixed(2); // 总耗时（秒）
+	
+		// 输出详细耗时统计
+		console.info("Task completed. Step-by-step time breakdown:");
+		stepTimes.forEach(({ step, time }) => console.info(`- ${step}: ${time}s`));
+		console.info(`Total time: ${totalElapsedTime}s`);
+		console.info(`Scan directory: ${scanDirPath}`);
+		console.info(`Number of Markdown files processed: ${markdownFiles.length}`);
+	
+		const detailedTime = stepTimes.map(({ step, time }) => `- ${step}: ${time}s`).join("\n");
+		new Notice(
+			`All done! Saving file hashes and added media now...\n` +
+			`Total Time: ${totalElapsedTime}s\n` +
+			detailedTime + `\n` +
+			`Scan directory: ${scanDirPath}\n` +
+			`Files processed: ${markdownFiles.length}`
+		);
+	
+		// 最后清空状态栏
+		this.updateStatusBar(0, 8, ""); // 清空状态栏
 	}
+	
 
 	async onload() {
 		console.log('loading Obsidian_to_Anki...');
